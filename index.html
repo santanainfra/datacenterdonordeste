@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Center do Nordeste - Multi-Level High Availability Platform</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060913;
+            color: #f1f5f9;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* Glassmorphism styling */
+        .glass-panel {
+            background: rgba(11, 17, 32, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card {
+            background: rgba(18, 26, 47, 0.65);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Glow effects */
+        .glow-cyan {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+        }
+
+        /* SVG Map Interactivity */
+        .state-path {
+            fill: #111827;
+            stroke: #1e293b;
+            stroke-width: 1.5;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .state-path:hover {
+            fill: #1e293b;
+            stroke: #38bdf8;
+            stroke-width: 2;
+            filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.4));
+        }
+        .state-path.active-state {
+            fill: #0c2847;
+            stroke: #06b6d4;
+            stroke-width: 2.2;
+            filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.5));
+        }
+
+        /* Interactive AZ Nodes */
+        .az-node {
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+        .az-node:hover {
+            transform: scale(1.18);
+        }
+
+        /* Pulse Animation */
+        @keyframes ringPulse {
+            0% { r: 8px; opacity: 0.9; stroke-width: 2px; }
+            50% { r: 18px; opacity: 0.3; stroke-width: 1.2px; }
+            100% { r: 26px; opacity: 0; stroke-width: 0.4px; }
+        }
+        .pulse-ring {
+            animation: ringPulse 2.2s infinite ease-out;
+            transform-origin: center;
+        }
+
+        /* Fiber Mesh Dash Offset Animation */
+        @keyframes dashFlow {
+            to {
+                stroke-dashoffset: -48;
+            }
+        }
+        .fiber-active {
+            stroke-dasharray: 8, 6;
+            animation: dashFlow 1.2s linear infinite;
+        }
+        .fiber-failover {
+            stroke-dasharray: 5, 5;
+            animation: dashFlow 0.5s linear infinite;
+            stroke: #ef4444 !important;
+        }
+
+        /* Viewport Zoom Container Transitions */
+        .zoom-stage {
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+            transform-origin: center center;
+        }
+
+        .tab-btn.active {
+            background: rgba(6, 182, 212, 0.15);
+            border-color: rgba(6, 182, 212, 0.4);
+            color: #38bdf8;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col overflow-x-hidden antialiased selection:bg-cyan-500 selection:text-slate-900">
+
+    <!-- Top Navigation Header -->
+    <header class="glass-panel sticky top-0 z-40 border-b border-slate-800/80 px-4 lg:px-8 py-3.5 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 glow-cyan">
+                <i data-lucide="server" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    Data Center do Nordeste
+                    <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">High Availability</span>
+                </h1>
+                <nav class="flex items-center gap-1.5 text-xs text-slate-400 mt-1 font-mono" id="breadcrumb-container">
+                    <button id="bc-region" class="hover:text-cyan-400 transition flex items-center gap-1 text-slate-200 font-semibold">
+                        <i data-lucide="globe" class="w-3.5 h-3.5 text-cyan-400"></i> Região Nordeste
+                    </button>
+                    <span id="bc-sep-1" class="hidden text-slate-600">&gt;</span>
+                    <button id="bc-state" class="hidden hover:text-cyan-400 transition text-slate-300"></button>
+                    <span id="bc-sep-2" class="hidden text-slate-600">&gt;</span>
+                    <span id="bc-az" class="hidden text-cyan-400 font-semibold"></span>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Global Real-Time Cluster Metrics -->
+        <div class="flex flex-wrap items-center gap-2 sm:gap-4 text-xs w-full sm:w-auto">
+            <div class="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800/80">
+                <span class="text-slate-400 block text-[10px] uppercase tracking-wider">SLA de Disponibilidade</span>
+                <span class="font-mono font-bold text-emerald-400">99.999%</span>
+            </div>
+            <div class="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800/80">
+                <span class="text-slate-400 block text-[10px] uppercase tracking-wider">Latência Média Inter-AZ</span>
+                <span class="font-mono font-bold text-cyan-400" id="global-latency-val">4.2 ms</span>
+            </div>
+            <div class="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800/80">
+                <span class="text-slate-400 block text-[10px] uppercase tracking-wider">Replicação Storage</span>
+                <span class="font-mono font-semibold text-blue-400" id="sync-mode-val">Synchronous NVMe-oF</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Application Grid -->
+    <main class="flex-1 p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 max-w-[1850px] mx-auto w-full">
+
+        <!-- LEFT COLUMN: Interactive Maps Viewport (7 Columns) -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <div class="glass-panel rounded-2xl p-3 sm:p-5 flex flex-col justify-between relative overflow-hidden min-h-[480px] sm:min-h-[580px] lg:min-h-[660px]">
+                
+                <!-- Viewport Control Overlay -->
+                <div class="flex flex-wrap justify-between items-center gap-2.5 z-10 mb-2">
+                    
+                    <!-- Level Switcher Buttons -->
+                    <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 w-full sm:w-auto">
+                        <button id="btn-view-regional" class="tab-btn active flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-700">
+                            <i data-lucide="map" class="w-3.5 h-3.5"></i> Nível 1: Visão Regional NE
+                        </button>
+                        <button id="btn-view-state" class="tab-btn flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-slate-800 text-slate-400 hover:text-slate-200">
+                            <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> Nível 2: Data Centers
+                        </button>
+                    </div>
+
+                    <!-- Interactive Actions -->
+                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button id="btn-sim-failover" class="px-3.5 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 bg-amber-500/10 text-amber-300 border border-amber-500/30 hover:bg-amber-500/20">
+                            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i> Simular Failover ZD
+                        </button>
+                        <button id="btn-reset-map" class="p-2 rounded-xl text-xs font-medium bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800 hover:text-white transition" title="Resetar Visão">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SVG Interactive Maps Stage Container -->
+                <div class="relative w-full h-full flex items-center justify-center my-auto py-2 overflow-hidden">
+                    
+                    <!-- ==========================================
+                         NÍVEL 1: MAPA DA REGIÃO NORDESTE (Formato Geográfico Real)
+                         ========================================== -->
+                    <div id="stage-regional" class="zoom-stage w-full h-full flex items-center justify-center">
+                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" class="w-full h-full max-h-[550px] drop-shadow-2xl selection:bg-transparent">
+                            <defs>
+                                <linearGradient id="net-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#06b6d4" />
+                                    <stop offset="100%" stop-color="#3b82f6" />
+                                </linearGradient>
+                            </defs>
+
+                            <!-- ESTADOS DO NORDESTE (Geometria do Mapa do Brasil Real) -->
+                            <g id="regional-states">
+                                <!-- Maranhão (MA) -->
+                                <path class="state-path" id="path-MA" data-uf="MA" d="M 120 180 L 160 130 L 210 145 L 240 210 L 210 280 L 160 290 L 130 250 Z" />
+                                <text x="170" y="215" fill="#64748b" font-size="11" font-weight="700" pointer-events="none">MA</text>
+
+                                <!-- Piauí (PI) -->
+                                <path class="state-path" id="path-PI" data-uf="PI" d="M 210 145 L 255 170 L 295 240 L 285 320 L 260 380 L 210 320 L 210 280 L 240 210 Z" />
+                                <text x="245" y="270" fill="#64748b" font-size="11" font-weight="700" pointer-events="none">PI</text>
+
+                                <!-- Ceará (CE) -->
+                                <path class="state-path" id="path-CE" data-uf="CE" d="M 255 170 L 330 135 L 370 170 L 340 230 L 295 240 Z" />
+                                <text x="310" y="185" fill="#38bdf8" font-size="12" font-weight="800" pointer-events="none">CEARÁ</text>
+
+                                <!-- Rio Grande do Norte (RN) -->
+                                <path class="state-path" id="path-RN" data-uf="RN" d="M 370 170 L 440 165 L 445 195 L 390 200 Z" />
+                                <text x="400" y="185" fill="#64748b" font-size="10" font-weight="700" pointer-events="none">RN</text>
+
+                                <!-- Paraíba (PB) -->
+                                <path class="state-path" id="path-PB" data-uf="PB" d="M 390 200 L 445 195 L 440 230 L 375 230 L 340 230 Z" />
+                                <text x="395" y="218" fill="#64748b" font-size="10" font-weight="700" pointer-events="none">PB</text>
+
+                                <!-- Pernambuco (PE) -->
+                                <path class="state-path" id="path-PE" data-uf="PE" d="M 295 240 L 340 230 L 375 230 L 440 230 L 435 265 L 350 270 L 310 275 Z" />
+                                <text x="350" y="253" fill="#34d399" font-size="12" font-weight="800" pointer-events="none">PERNAMBUCO</text>
+
+                                <!-- Alagoas (AL) -->
+                                <path class="state-path" id="path-AL" data-uf="AL" d="M 350 270 L 435 265 L 420 300 L 370 295 Z" />
+                                <text x="375" y="286" fill="#fbbf24" font-size="11" font-weight="800" pointer-events="none">ALAGOAS</text>
+
+                                <!-- Sergipe (SE) -->
+                                <path class="state-path" id="path-SE" data-uf="SE" d="M 370 295 L 420 300 L 400 330 L 360 315 Z" />
+                                <text x="382" y="314" fill="#64748b" font-size="9" font-weight="700" pointer-events="none">SE</text>
+
+                                <!-- Bahia (BA) -->
+                                <path class="state-path" id="path-BA" data-uf="BA" d="M 260 380 L 285 320 L 310 275 L 350 270 L 370 295 L 360 315 L 400 330 L 380 430 L 310 470 L 250 430 L 210 320 Z" />
+                                <text x="300" y="380" fill="#38bdf8" font-size="15" font-weight="800" pointer-events="none">BAHIA</text>
+                            </g>
+
+                            <!-- FIBER BACKBONE INTER-STATE LINES -->
+                            <g id="regional-fibers">
+                                <line id="fiber-ce-pe" x1="330" y1="160" x2="415" y2="245" stroke="url(#net-grad)" stroke-width="2.5" class="fiber-active" />
+                                <line id="fiber-pe-al" x1="415" y1="245" x2="395" y2="280" stroke="url(#net-grad)" stroke-width="2.5" class="fiber-active" />
+                                <line id="fiber-al-ba" x1="395" y1="280" x2="340" y2="390" stroke="url(#net-grad)" stroke-width="2.5" class="fiber-active" />
+                                <line id="fiber-ce-ba" x1="330" y1="160" x2="340" y2="390" stroke="url(#net-grad)" stroke-width="1.8" stroke-dasharray="4,4" opacity="0.6" />
+                            </g>
+
+                            <!-- REGIONAL NODES OVERLAY -->
+                            <g id="regional-nodes">
+                                <!-- CE Node -->
+                                <g class="az-node" data-uf="CE" transform="translate(330, 160)">
+                                    <circle class="pulse-ring" stroke="#06b6d4" fill="none" cx="0" cy="0" r="10" />
+                                    <circle cx="0" cy="0" r="8" fill="#0284c7" stroke="#38bdf8" stroke-width="2"/>
+                                    <text x="12" y="4" fill="#f8fafc" font-size="10" font-weight="700">Fortaleza (Hub Submarino)</text>
+                                </g>
+
+                                <!-- PE Node -->
+                                <g class="az-node" data-uf="PE" transform="translate(415, 245)">
+                                    <circle class="pulse-ring" stroke="#10b981" fill="none" cx="0" cy="0" r="10" />
+                                    <circle cx="0" cy="0" r="8" fill="#059669" stroke="#34d399" stroke-width="2"/>
+                                    <text x="-125" y="-6" fill="#34d399" font-size="11" font-weight="800">PERNAMBUCO</text>
+                                    <text x="-125" y="8" fill="#f8fafc" font-size="10" font-weight="700">Recife (Core Cloud)</text>
+                                </g>
+
+                                <!-- AL Node -->
+                                <g class="az-node" data-uf="AL" transform="translate(395, 280)">
+                                    <circle class="pulse-ring" stroke="#f59e0b" fill="none" cx="0" cy="0" r="10" />
+                                    <circle cx="0" cy="0" r="7" fill="#d97706" stroke="#fbbf24" stroke-width="2"/>
+                                    <text x="12" y="4" fill="#f8fafc" font-size="10" font-weight="700">Maceió (DR Continuity)</text>
+                                </g>
+
+                                <!-- BA Node -->
+                                <g class="az-node" data-uf="BA" transform="translate(340, 390)">
+                                    <circle class="pulse-ring" stroke="#06b6d4" fill="none" cx="0" cy="0" r="10" />
+                                    <circle cx="0" cy="0" r="8" fill="#0284c7" stroke="#38bdf8" stroke-width="2"/>
+                                    <text x="-130" y="4" fill="#f8fafc" font-size="10" font-weight="700">Salvador (Edge &amp; Big Data)</text>
+                                </g>
+                            </g>
+                        </svg>
+                    </div>
+
+                    <!-- ==========================================
+                         NÍVEL 2: MAPA FOCADO DO ESTADO SELECIONADO
+                         ========================================== -->
+                    <div id="stage-state" class="zoom-stage w-full h-full hidden flex flex-col items-center justify-center">
+                        <div id="state-svg-wrapper" class="w-full h-full max-h-[580px] flex items-center justify-center"></div>
+                    </div>
+
+                </div>
+
+                <!-- Footer Mode Legend -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-800/80 text-xs">
+                    <div class="glass-card p-2 rounded-xl flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 flex-shrink-0"></span>
+                        <span class="text-slate-300 font-medium truncate">AZ-1 Primária</span>
+                    </div>
+                    <div class="glass-card p-2 rounded-xl flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+                        <span class="text-slate-300 font-medium truncate">AZ-2 Secundária</span>
+                    </div>
+                    <div class="glass-card p-2 rounded-xl flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"></span>
+                        <span class="text-slate-300 font-medium truncate">DR / Continuity Zone</span>
+                    </div>
+                    <div class="glass-card p-2 rounded-xl flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0"></span>
+                        <span class="text-slate-300 font-medium truncate">Edge POP local</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Inter-State Latency & Redundancy Matrix Card -->
+            <div class="glass-panel rounded-2xl p-4 lg:p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-sm flex items-center gap-2 text-white">
+                        <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i> Matriz Inter-Estadual de Latência &amp; Redundância
+                    </h3>
+                    <span class="text-[10px] font-mono text-slate-400 hidden sm:inline">Rede DWDM Mesclada (Mesh Topology)</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left text-slate-300 font-mono">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase text-[10px]">
+                            <tr>
+                                <th class="p-2 border-b border-slate-800">Origem \ Destino</th>
+                                <th class="p-2 border-b border-slate-800 text-center">Maceió (AL)</th>
+                                <th class="p-2 border-b border-slate-800 text-center">Salvador (BA)</th>
+                                <th class="p-2 border-b border-slate-800 text-center">Fortaleza (CE)</th>
+                                <th class="p-2 border-b border-slate-800 text-center">Recife (PE)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60">
+                            <tr>
+                                <td class="p-2 font-semibold text-slate-200">Maceió (AL)</td>
+                                <td class="p-2 text-center text-slate-500">0.2 ms</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">4.1 ms</td>
+                                <td class="p-2 text-center text-cyan-400">6.8 ms</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">2.4 ms</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 font-semibold text-slate-200">Salvador (BA)</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">4.1 ms</td>
+                                <td class="p-2 text-center text-slate-500">0.2 ms</td>
+                                <td class="p-2 text-center text-cyan-400">8.2 ms</td>
+                                <td class="p-2 text-center text-emerald-400">5.5 ms</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 font-semibold text-slate-200">Fortaleza (CE)</td>
+                                <td class="p-2 text-center text-cyan-400">6.8 ms</td>
+                                <td class="p-2 text-center text-cyan-400">8.2 ms</td>
+                                <td class="p-2 text-center text-slate-500">0.1 ms</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">3.9 ms</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 font-semibold text-slate-200">Recife (PE)</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">2.4 ms</td>
+                                <td class="p-2 text-center text-emerald-400">5.5 ms</td>
+                                <td class="p-2 text-center text-emerald-400 font-bold">3.9 ms</td>
+                                <td class="p-2 text-center text-slate-500">0.2 ms</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- RIGHT COLUMN: Selected State / Availability Zone Spec Dashboard (5 Columns) -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            
+            <div id="details-panel" class="glass-panel rounded-2xl p-4 sm:p-5 lg:p-6 flex flex-col gap-5 border-l-4 border-l-cyan-500 transition-all duration-300">
+                
+                <!-- State / Data Center Header -->
+                <div class="flex items-start justify-between border-b border-slate-800 pb-4 gap-3">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span id="card-state-code" class="px-2.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold font-mono">
+                                ALAGOAS - AL
+                            </span>
+                            <span id="card-az-badge" class="px-2.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                ZONA DE DISPONIBILIDADE ZD-1
+                            </span>
+                        </div>
+                        <h2 id="card-title" class="text-xl sm:text-2xl font-bold text-white tracking-tight">Data Center Maceió</h2>
+                        <p id="card-subtitle" class="text-xs text-slate-400 mt-0.5">Ponto Estratégico de Disaster Recovery &amp; Réplica de Continuidade</p>
+                    </div>
+                    <div id="card-icon" class="p-2.5 sm:p-3 rounded-2xl bg-slate-900 border border-slate-800 text-cyan-400 flex-shrink-0">
+                        <i data-lucide="database" class="w-6 h-6 sm:w-7 sm:h-7"></i>
+                    </div>
+                </div>
+
+                <!-- Strategic Role & Connectivity Importance -->
+                <div>
+                    <h3 class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-cyan-400"></i> Importância Estratégica Regional
+                    </h3>
+                    <p id="card-importance" class="text-xs lg:text-sm text-slate-300 leading-relaxed bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
+                        O Data Center de Maceió atua como o principal nó de Disaster Recovery (DR) e backup geográfico síncrono para os hubs de Recife e Salvador. Localizado estrategicamente com redundância energética e conectividade fibra dedicada de ultra-baixa latência.
+                    </p>
+                </div>
+
+                <!-- Active Zone Selector Buttons (Within State) -->
+                <div>
+                    <h3 class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-2 flex items-center gap-1.5">
+                        <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i> Zonas de Disponibilidade Locais (AZs)
+                    </h3>
+                    <div id="az-selector-container" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <!-- Dynamic AZ buttons populated via JS -->
+                    </div>
+                </div>
+
+                <!-- Live Hardware & Real-time Telemetry Grid -->
+                <div class="space-y-3">
+                    <h3 class="text-xs uppercase font-semibold text-slate-400 tracking-wider flex items-center justify-between">
+                        <span class="flex items-center gap-1.5"><i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i> Telemetria em Tempo Real (Active-Active)</span>
+                        <span class="text-[10px] font-mono text-emerald-400 animate-pulse">● LIVE</span>
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="glass-card p-3 rounded-xl">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[11px] text-slate-400">Processamento CPU</span>
+                                <span id="m-cpu-text" class="text-xs font-mono font-bold text-cyan-400">38%</span>
+                            </div>
+                            <div class="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                                <div id="m-cpu-bar" class="bg-cyan-500 h-full rounded-full transition-all duration-500" style="width: 38%"></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card p-3 rounded-xl">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[11px] text-slate-400">Pool Storage NVMe</span>
+                                <span id="m-ram-text" class="text-xs font-mono font-bold text-emerald-400">58%</span>
+                            </div>
+                            <div class="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                                <div id="m-ram-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 58%"></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card p-3 rounded-xl">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[11px] text-slate-400">Tráfego de Rede</span>
+                                <span id="m-net-text" class="text-xs font-mono font-bold text-blue-400">112 Gbps</span>
+                            </div>
+                            <div class="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                                <div id="m-net-bar" class="bg-blue-500 h-full rounded-full transition-all duration-500" style="width: 45%"></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card p-3 rounded-xl">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-[11px] text-slate-400">Instâncias VMs Ativas</span>
+                                <span id="m-vm-text" class="text-xs font-mono font-bold text-amber-400">1,240 / 2,000</span>
+                            </div>
+                            <div class="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                                <div id="m-vm-bar" class="bg-amber-500 h-full rounded-full transition-all duration-500" style="width: 62%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hardware Equipment Inventory -->
+                <div>
+                    <h3 class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-2.5 flex items-center gap-1.5">
+                        <i data-lucide="server-cog" class="w-4 h-4 text-cyan-400"></i> Inventário de Hardware &amp; Infraestrutura
+                    </h3>
+
+                    <div id="hardware-spec-list" class="space-y-2 text-xs">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+
+                <!-- Status & Action Footer -->
+                <div class="pt-3 border-t border-slate-800/80 flex flex-wrap justify-between items-center gap-3">
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+                        <span>Certificação TIER III / IV Standard</span>
+                    </div>
+                    <button id="btn-sync" class="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 transition">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Sincronizar AZs
+                    </button>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Professional Footer Section -->
+    <footer class="mt-auto glass-panel border-t border-slate-800/80 py-4 px-4 lg:px-8 text-center text-xs text-slate-400 font-mono flex flex-col sm:flex-row justify-center items-center gap-2">
+        <div class="flex items-center gap-2 justify-center">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span class="text-slate-300 font-semibold">Data Center do Nordeste — Alta Disponibilidade &amp; Resiliência</span>
+        </div>
+        <span class="hidden sm:inline text-slate-600">|</span>
+        <div class="flex items-center justify-center gap-1.5 text-cyan-400 font-semibold">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            Desenvolvida pelo Analista Flávio Santana ® - Marca Registrada
+        </div>
+    </footer>
+
+    <!-- Failover Toast Alert -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none max-w-sm w-full px-4 sm:px-0">
+        <div class="glass-panel p-4 rounded-2xl border border-amber-500/40 bg-slate-950/95 shadow-2xl flex items-center gap-3">
+            <div class="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 flex-shrink-0">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h4 id="toast-title" class="font-bold text-sm text-white">Failover ZD Executado</h4>
+                <p id="toast-msg" class="text-xs text-slate-300">Cargas redirecionadas para AZs locais redundantes.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // DATA STRUCTURE: Complete Regional & State Data Centers
+        const stateDataCenters = {
+            AL: {
+                name: 'Alagoas',
+                uf: 'AL',
+                capital: 'Maceió',
+                summary: 'Maceió é o nó estratégico de Disaster Recovery & Réplica de Continuidade Geográfica.',
+                color: 'amber',
+                azs: [
+                    {
+                        id: 'AL-AZ1',
+                        name: 'AZ-1 Maceió Norte',
+                        type: 'DR Continuity Hub',
+                        icon: 'database',
+                        importance: 'Réplica de contingência e backup geográfico síncrono para os hubs de Recife e Salvador com tolerância a falhas N+2.',
+                        metrics: { cpu: 38, ram: 58, net: 112, vm: '1,240 / 2,000', vmP: 62 },
+                        coords: { x: 120, y: 140 },
+                        hardware: [
+                            { name: 'Servidores Blade Dell PowerEdge', spec: '16x Chassis MX7000 (128 Nodes Dual Xeon Platinum)', icon: 'cpu' },
+                            { name: 'Storage All-Flash NVMe', spec: 'Pure Storage FlashArray //X90 - Rep. Síncrona < 2ms', icon: 'hard-drive' },
+                            { name: 'Switches Core Cisco Nexus', spec: 'Nexus 9300-FX3 (400G EVPN-VXLAN Topology)', icon: 'network' },
+                            { name: 'Power UPS Redundante N+2', spec: 'APC Symmetra PX 500kVA + Geradores Tier III', icon: 'zap' }
+                        ]
+                    },
+                    {
+                        id: 'AL-AZ2',
+                        name: 'AZ-2 Jaraguá Tech',
+                        type: 'Secondary Mirror Zone',
+                        icon: 'shield-check',
+                        importance: 'Zona secundária local espelhada para replicação local e garantia de zero perda de dados (RPO=0).',
+                        metrics: { cpu: 25, ram: 42, net: 64, vm: '800 / 1,500', vmP: 53 },
+                        coords: { x: 200, y: 170 },
+                        hardware: [
+                            { name: 'Clusters HPE ProLiant Gen11', spec: '12x Racks DL380 (AMD EPYC 9004)', icon: 'cpu' },
+                            { name: 'Storage SAN SAN/NAS High-Speed', spec: 'Dell PowerStore 5000T Flash', icon: 'hard-drive' },
+                            { name: 'Borda Arista Networks', spec: 'Arista 7050SX3 Series (100GbE Uplinks)', icon: 'network' },
+                            { name: 'Geradores Diesel Dedicados', spec: 'Dual Cummins 1250 kVA Standby Power', icon: 'zap' }
+                        ]
+                    }
+                ]
+            },
+            BA: {
+                name: 'Bahia',
+                uf: 'BA',
+                capital: 'Salvador',
+                title: 'Data Center Salvador (BA)',
+                summary: 'Salvador é o Hub Principal de Resiliência, Edge Computing & Big Data do Sul do Nordeste.',
+                color: 'cyan',
+                azs: [
+                    {
+                        id: 'BA-AZ1',
+                        name: 'AZ-1 Salvador Paralela',
+                        type: 'Core Regional Hub',
+                        icon: 'server',
+                        importance: 'Concentrador principal de tráfego de dados para o sul da região Nordeste. Focado em analytics, cloud privada e baixa latência.',
+                        metrics: { cpu: 74, ram: 82, net: 380, vm: '3,850 / 4,500', vmP: 85 },
+                        coords: { x: 180, y: 160 },
+                        hardware: [
+                            { name: 'Servidores Hyperscale HPE', spec: '32x Racks HPE ProLiant DL380 Gen11 AMD EPYC', icon: 'cpu' },
+                            { name: 'Storage All-NVMe NetApp', spec: 'AFF A800 NVMe (5 PB Raw Capacity)', icon: 'hard-drive' },
+                            { name: 'Roteadores Core Juniper', spec: 'Juniper MX960 3D Universal Edge + DWDM Ciena', icon: 'network' },
+                            { name: 'Climatização Chilled Water', spec: 'In-Row N+2 Free Cooling com sensores térmicos AI', icon: 'thermometer' }
+                        ]
+                    },
+                    {
+                        id: 'BA-AZ2',
+                        name: 'AZ-2 Camaçari Edge',
+                        type: 'Industrial Edge Computing',
+                        icon: 'cpu',
+                        importance: 'Ponto Edge dedicado ao polo industrial e automação avançada com processamento analítico local.',
+                        metrics: { cpu: 48, ram: 60, net: 190, vm: '1,900 / 2,500', vmP: 76 },
+                        coords: { x: 230, y: 110 },
+                        hardware: [
+                            { name: 'Nodes Dell Edge Compute', spec: 'Dell PowerEdge XR4000 Ruggedized Nodes', icon: 'cpu' },
+                            { name: 'Storage SAN Distribuído', spec: 'Ceph Cluster High Density 2PB', icon: 'hard-drive' },
+                            { name: 'Firewalls Palo Alto Enterprise', spec: 'Palo Alto PA-5450 Redundant Pair', icon: 'shield' },
+                            { name: 'N+1 UPS & Baterias Lítio', spec: 'Schneider Electric Galaxy VX 750kW', icon: 'zap' }
+                        ]
+                    }
+                ]
+            },
+            CE: {
+                name: 'Ceará',
+                uf: 'CE',
+                capital: 'Fortaleza',
+                summary: 'Fortaleza é o Gateway Internacional & Hub Central de Cabos Submarinos Intercontinentais.',
+                color: 'cyan',
+                azs: [
+                    {
+                        id: 'CE-AZ1',
+                        name: 'AZ-1 Fortaleza Praia do Futuro',
+                        type: 'Submarine Cable Landing Hub',
+                        icon: 'globe',
+                        importance: 'Nó neural de interconexão internacional. Conecta o Brasil à Europa, África e América do Norte via cabos submarinos.',
+                        metrics: { cpu: 68, ram: 76, net: 850, vm: '4,200 / 5,000', vmP: 84 },
+                        coords: { x: 210, y: 100 },
+                        hardware: [
+                            { name: 'Compute AI High Density', spec: 'Lenovo ThinkSystem SR650 V3 (NVIDIA H100 Accelerators)', icon: 'cpu' },
+                            { name: 'Direct Submarine Cable Interconnect', spec: 'Estação Cable Landing CLS com Direct-Peering', icon: 'cable' },
+                            { name: 'Switches Core Arista 400G', spec: 'Arista 7800R3 Series Modular Switches', icon: 'network' },
+                            { name: 'Subestação de Energia Tier IV', spec: 'Dual Utility Feeder 15MW + 2N Redundância', icon: 'zap' }
+                        ]
+                    },
+                    {
+                        id: 'CE-AZ2',
+                        name: 'AZ-2 Eusébio Tech Park',
+                        type: 'Hyperscale Expansion Zone',
+                        icon: 'layers',
+                        importance: 'Zona de expansão Hyperscale para mitigação de risco e redundância metropolitana ao Hub Submarino.',
+                        metrics: { cpu: 52, ram: 61, net: 410, vm: '2,600 / 3,500', vmP: 74 },
+                        coords: { x: 250, y: 150 },
+                        hardware: [
+                            { name: 'Racks Modulares Cisco UCS', spec: 'Cisco UCS X-Series Fabric Compute', icon: 'cpu' },
+                            { name: 'Storage Matrix Block & Object', spec: 'Hitachi Vantara VSP E1090 All-NVMe', icon: 'hard-drive' },
+                            { name: 'Infraestrutura de Fibra Escura', spec: 'Anel Óptico Metropolitano Redundante Destaque', icon: 'network' },
+                            { name: 'UPS Triplo Redundante 2N', spec: 'Eaton 9395P 1000kVA High Efficiency', icon: 'zap' }
+                        ]
+                    }
+                ]
+            },
+            PE: {
+                name: 'Pernambuco',
+                uf: 'PE',
+                capital: 'Recife',
+                summary: 'Recife é o Hub de Inovação Porto Digital, Software Enterprise & Core Cloud.',
+                color: 'emerald',
+                azs: [
+                    {
+                        id: 'PE-AZ1',
+                        name: 'AZ-1 Recife Porto Digital',
+                        type: 'Core Cloud & Software Hub',
+                        icon: 'cloud-lightning',
+                        importance: 'Centro neuvrálgico para sistemas governamentais, ecossistema do Porto Digital e serviços de nuvem privada corporativa.',
+                        metrics: { cpu: 62, ram: 71, net: 480, vm: '3,400 / 4,200', vmP: 81 },
+                        coords: { x: 230, y: 120 },
+                        hardware: [
+                            { name: 'Cloud Cluster VMware Tanzu', spec: 'Nó Kubernetes Enterprise vSphere 8 / Cloud Foundation', icon: 'layers' },
+                            { name: 'Storage All-Flash Dell PowerStore', spec: 'Dell PowerStore 9200T NVMe Active-Active', icon: 'hard-drive' },
+                            { name: 'Balancadores F5 Networks', spec: 'F5 BIG-IP Next High-Availability Pair (L4-L7 Offload)', icon: 'shield' },
+                            { name: 'Segurança Zero-Trust Firewall', spec: 'Cluster Palo Alto PA-7080 Next-Gen', icon: 'lock' }
+                        ]
+                    },
+                    {
+                        id: 'PE-AZ2',
+                        name: 'AZ-2 Suape Logistics Edge',
+                        type: 'Mission-Critical Continuity',
+                        icon: 'database',
+                        importance: 'Data Center voltado para aplicações críticas do complexo industrial e contingência operacional.',
+                        metrics: { cpu: 34, ram: 49, net: 160, vm: '1,100 / 2,000', vmP: 55 },
+                        coords: { x: 180, y: 180 },
+                        hardware: [
+                            { name: 'Servidores Ruggedized IBM Power', spec: 'IBM Power10 Systems para Missão Crítica', icon: 'cpu' },
+                            { name: 'Storage IBM FlashSystem 9500', spec: 'In-line Hardware Compression & Cyber Vault', icon: 'hard-drive' },
+                            { name: 'Borda Cisco Catalyst Core', spec: 'Catalyst 9600 Series Switches', icon: 'network' },
+                            { name: 'UPS Modular & Geradores Diesel', spec: 'Riello Master HP 400kVA N+1', icon: 'zap' }
+                        ]
+                    }
+                ]
+            },
+            MA: { name: 'Maranhão', uf: 'MA', capital: 'São Luís', summary: 'Ponto de Presença Edge e Conectividade para a Região Norte-Nordeste.', azs: [] },
+            PI: { name: 'Piauí', uf: 'PI', capital: 'Teresina', summary: 'Nó Edge Intermediário de Tráfego.', azs: [] },
+            RN: { name: 'Rio Grande do Norte', uf: 'RN', capital: 'Natal', summary: 'POP Regional de Anel de Fibra Óptica.', azs: [] },
+            PB: { name: 'Paraíba', uf: 'PB', capital: 'João Pessoa', summary: 'Nó Edge Integrado ao Anel PE-CE.', azs: [] },
+            SE: { name: 'Sergipe', uf: 'SE', capital: 'Aracaju', summary: 'POP de Baixa Latência Interligado à Bahia e Alagoas.', azs: [] }
+        };
+
+        // Application State Management
+        let currentLevel = 1; // 1 = Regional, 2 = State Level
+        let selectedState = 'AL';
+        let selectedAZIndex = 0;
+        let isFailoverActive = false;
+
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Update Breadcrumbs
+        function updateBreadcrumbs() {
+            const bcState = document.getElementById('bc-state');
+            const bcSep1 = document.getElementById('bc-sep-1');
+            const bcAZ = document.getElementById('bc-az');
+            const bcSep2 = document.getElementById('bc-sep-2');
+
+            if (currentLevel === 1) {
+                bcState.classList.add('hidden');
+                bcSep1.classList.add('hidden');
+                bcAZ.classList.add('hidden');
+                bcSep2.classList.add('hidden');
+            } else if (currentLevel === 2) {
+                const stateObj = stateDataCenters[selectedState];
+                bcState.innerText = stateObj.name;
+                bcState.classList.remove('hidden');
+                bcSep1.classList.remove('hidden');
+
+                if (stateObj.azs && stateObj.azs.length > 0) {
+                    const azObj = stateObj.azs[selectedAZIndex];
+                    bcAZ.innerText = azObj ? azObj.name : '';
+                    bcAZ.classList.remove('hidden');
+                    bcSep2.classList.remove('hidden');
+                } else {
+                    bcAZ.classList.add('hidden');
+                    bcSep2.classList.add('hidden');
+                }
+            }
+        }
+
+        // Switch to Level 1 (Regional Overview)
+        function showRegionalView() {
+            currentLevel = 1;
+            document.getElementById('stage-regional').classList.remove('hidden');
+            document.getElementById('stage-state').classList.add('hidden');
+
+            document.getElementById('btn-view-regional').classList.add('active');
+            document.getElementById('btn-view-state').classList.remove('active');
+
+            // Reset SVG Highlight
+            document.querySelectorAll('.state-path').forEach(p => p.classList.remove('active-state'));
+
+            updateBreadcrumbs();
+            updatePanelDetails();
+        }
+
+        // Switch to Level 2 (State Focus)
+        function showStateView(uf) {
+            if (!stateDataCenters[uf]) return;
+            
+            selectedState = uf;
+            selectedAZIndex = 0;
+            currentLevel = 2;
+
+            document.getElementById('stage-regional').classList.add('hidden');
+            document.getElementById('stage-state').classList.remove('hidden');
+
+            document.getElementById('btn-view-regional').classList.remove('active');
+            document.getElementById('btn-view-state').classList.add('active');
+
+            // Highlight state path in regional map
+            document.querySelectorAll('.state-path').forEach(p => {
+                if (p.getAttribute('data-uf') === uf) {
+                    p.classList.add('active-state');
+                } else {
+                    p.classList.remove('active-state');
+                }
+            });
+
+            renderStateSvg(uf);
+            updateBreadcrumbs();
+            updatePanelDetails();
+        }
+
+        // Render Focus Map for Selected State (Level 2)
+        function renderStateSvg(uf) {
+            const state = stateDataCenters[uf];
+            const container = document.getElementById('state-svg-wrapper');
+
+            if (!state.azs || state.azs.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-8 glass-card rounded-2xl max-w-md">
+                        <i data-lucide="info" class="w-10 h-10 text-cyan-400 mx-auto mb-3"></i>
+                        <h3 class="font-bold text-lg text-white">Data Center Edge em Planejamento</h3>
+                        <p class="text-xs text-slate-400 mt-2">${state.summary}</p>
+                        <button onclick="showRegionalView()" class="mt-4 px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-semibold">
+                            Voltar ao Mapa Regional
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            // Create Interactive State Vector View
+            let azNodesSvg = '';
+            state.azs.forEach((az, idx) => {
+                const isSelected = idx === selectedAZIndex;
+                const nodeColor = idx === 0 ? '#0284c7' : '#059669';
+                const strokeColor = isSelected ? '#38bdf8' : '#64748b';
+
+                azNodesSvg += `
+                    <g class="az-node cursor-pointer" onclick="selectAZ(${idx})" transform="translate(${az.coords.x}, ${az.coords.y})">
+                        <circle class="pulse-ring" stroke="${idx === 0 ? '#06b6d4' : '#10b981'}" fill="none" cx="0" cy="0" r="14" />
+                        <circle cx="0" cy="0" r="${isSelected ? '12' : '10'}" fill="${nodeColor}" stroke="${strokeColor}" stroke-width="${isSelected ? '3' : '1.5'}" />
+                        <circle cx="0" cy="0" r="4" fill="#ffffff" />
+                        <text x="18" y="4" fill="${isSelected ? '#38bdf8' : '#f8fafc'}" font-size="12" font-weight="700">${az.name}</text>
+                    </g>
+                `;
+            });
+
+            container.innerHTML = `
+                <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet" class="w-full h-full max-h-[500px]">
+                    <defs>
+                        <linearGradient id="state-mesh" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#0284c7" />
+                            <stop offset="100%" stop-color="#10b981" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- Stylized Focus Map Boundary -->
+                    <rect x="20" y="20" width="360" height="260" rx="20" fill="#0b1324" stroke="#1e293b" stroke-width="2"/>
+                    
+                    <!-- Intra-State Fiber Connection Line between AZs -->
+                    ${state.azs.length > 1 ? `
+                        <line x1="${state.azs[0].coords.x}" y1="${state.azs[0].coords.y}" x2="${state.azs[1].coords.x}" y2="${state.azs[1].coords.y}" 
+                              stroke="${isFailoverActive ? '#ef4444' : 'url(#state-mesh)'}" stroke-width="3" class="${isFailoverActive ? 'fiber-failover' : 'fiber-active'}" />
+                    ` : ''}
+
+                    <!-- Render AZ Nodes -->
+                    ${azNodesSvg}
+                </svg>
+            `;
+        }
+
+        // Select specific AZ in Level 2
+        function selectAZ(index) {
+            selectedAZIndex = index;
+            renderStateSvg(selectedState);
+            updateBreadcrumbs();
+            updatePanelDetails();
+        }
+
+        // Render Hardware Inventory
+        function renderHardwareList(hardwareItems) {
+            const container = document.getElementById('hardware-spec-list');
+            container.innerHTML = '';
+
+            hardwareItems.forEach(hw => {
+                const item = document.createElement('div');
+                item.className = 'glass-card p-2.5 rounded-xl flex items-start gap-3 border border-slate-800/80 hover:border-slate-700 transition';
+                item.innerHTML = `
+                    <div class="p-2 rounded-lg bg-slate-900 text-cyan-400 border border-slate-800 mt-0.5 flex-shrink-0">
+                        <i data-lucide="${hw.icon}" class="w-4 h-4"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h4 class="font-semibold text-slate-100 text-xs truncate">${hw.name}</h4>
+                        <p class="text-[11px] text-slate-400 font-mono mt-0.5 break-words">${hw.spec}</p>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Update Right Panel Content
+        function updatePanelDetails() {
+            const state = stateDataCenters[selectedState];
+            if (!state) return;
+
+            // Update State Badges & Headers
+            document.getElementById('card-state-code').innerText = `${state.name.toUpperCase()} - ${state.uf}`;
+            
+            // Populate AZ Selector Buttons
+            const azBtnContainer = document.getElementById('az-selector-container');
+            azBtnContainer.innerHTML = '';
+
+            if (state.azs && state.azs.length > 0) {
+                state.azs.forEach((az, idx) => {
+                    const btn = document.createElement('button');
+                    const isActive = idx === selectedAZIndex;
+                    btn.className = `p-2 rounded-xl text-xs font-mono font-semibold border text-left transition ${
+                        isActive 
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 glow-cyan' 
+                        : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:bg-slate-800'
+                    }`;
+                    btn.innerText = az.name;
+                    btn.onclick = () => selectAZ(idx);
+                    azBtnContainer.appendChild(btn);
+                });
+
+                const currentAZ = state.azs[selectedAZIndex] || state.azs[0];
+
+                document.getElementById('card-az-badge').innerText = `ZONA ${currentAZ.id}`;
+                document.getElementById('card-title').innerText = currentAZ.name;
+                document.getElementById('card-subtitle').innerText = `${currentAZ.type} • ${state.capital}`;
+                document.getElementById('card-importance').innerText = currentAZ.importance;
+
+                // Metrics
+                document.getElementById('m-cpu-text').innerText = `${currentAZ.metrics.cpu}%`;
+                document.getElementById('m-cpu-bar').style.width = `${currentAZ.metrics.cpu}%`;
+
+                document.getElementById('m-ram-text').innerText = `${currentAZ.metrics.ram}%`;
+                document.getElementById('m-ram-bar').style.width = `${currentAZ.metrics.ram}%`;
+
+                document.getElementById('m-net-text').innerText = `${currentAZ.metrics.net} Gbps`;
+                document.getElementById('m-net-bar').style.width = `${Math.min(currentAZ.metrics.net / 10, 100)}%`;
+
+                document.getElementById('m-vm-text').innerText = currentAZ.metrics.vm;
+                document.getElementById('m-vm-bar').style.width = `${currentAZ.metrics.vmP}%`;
+
+                // Hardware Spec List
+                renderHardwareList(currentAZ.hardware);
+            } else {
+                document.getElementById('card-az-badge').innerText = 'PLANEJAMENTO POP';
+                document.getElementById('card-title').innerText = `Data Center ${state.capital}`;
+                document.getElementById('card-subtitle').innerText = `Ponto de Presença ${state.uf}`;
+                document.getElementById('card-importance').innerText = state.summary;
+                document.getElementById('hardware-spec-list').innerHTML = `
+                    <div class="p-4 text-center text-slate-500 text-xs">
+                        Equipamentos em processo de provisionamento de alta disponibilidade.
+                    </div>
+                `;
+            }
+        }
+
+        // EVENT LISTENERS
+
+        // Click on Regional Map States
+        document.querySelectorAll('.state-path, .az-node').forEach(elem => {
+            elem.addEventListener('click', () => {
+                const uf = elem.getAttribute('data-uf');
+                if (uf) {
+                    showStateView(uf);
+                }
+            });
+        });
+
+        // Level Switcher Buttons
+        document.getElementById('btn-view-regional').addEventListener('click', showRegionalView);
+        document.getElementById('btn-view-state').addEventListener('click', () => showStateView(selectedState));
+        document.getElementById('btn-reset-map').addEventListener('click', showRegionalView);
+        document.getElementById('bc-region').addEventListener('click', showRegionalView);
+
+        // Failover Simulation
+        document.getElementById('btn-sim-failover').addEventListener('click', () => {
+            isFailoverActive = !isFailoverActive;
+
+            const globalSync = document.getElementById('sync-mode-val');
+            const globalLat = document.getElementById('global-latency-val');
+            const lines = ['fiber-ce-pe', 'fiber-pe-al', 'fiber-al-ba'];
+
+            if (isFailoverActive) {
+                lines.forEach(id => {
+                    const l = document.getElementById(id);
+                    if (l) l.className.baseVal = 'fiber-failover';
+                });
+
+                globalSync.innerText = 'DR Failover Active-Passive';
+                globalSync.className = 'font-mono font-semibold text-amber-400 animate-pulse';
+                globalLat.innerText = '7.4 ms (Rota Contingenciada)';
+
+                showToast('Failover ZD Executado', 'Tráfego redirecionado com sucesso para os nós de contingência secundários.');
+            } else {
+                lines.forEach(id => {
+                    const l = document.getElementById(id);
+                    if (l) l.className.baseVal = 'fiber-active';
+                });
+
+                globalSync.innerText = 'Synchronous NVMe-oF';
+                globalSync.className = 'font-mono font-semibold text-blue-400';
+                globalLat.innerText = '4.2 ms';
+
+                showToast('Rede Restabelecida', 'Regime de operação Active-Active reestabelecido em todas as AZs.');
+            }
+
+            if (currentLevel === 2) {
+                renderStateSvg(selectedState);
+            }
+        });
+
+        // Re-sync Button
+        document.getElementById('btn-sync').addEventListener('click', () => {
+            const btn = document.getElementById('btn-sync');
+            btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5 animate-spin"></i> Sincronizando...`;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                btn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i> Sincronizado`;
+                lucide.createIcons();
+                setTimeout(() => {
+                    btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Sincronizar AZs`;
+                    lucide.createIcons();
+                }, 2000);
+            }, 1000);
+        });
+
+        // Toast Notification Display
+        function showToast(title, msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-msg').innerText = msg;
+
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 3800);
+        }
+
+        // Live Telemetry Simulation Loop
+        setInterval(() => {
+            const state = stateDataCenters[selectedState];
+            if (state && state.azs && state.azs[selectedAZIndex]) {
+                const currentAZ = state.azs[selectedAZIndex];
+                const jitter = (Math.random() * 4 - 2).toFixed(0);
+                const updatedCpu = Math.min(Math.max(currentAZ.metrics.cpu + parseInt(jitter), 15), 98);
+
+                document.getElementById('m-cpu-text').innerText = `${updatedCpu}%`;
+                document.getElementById('m-cpu-bar').style.width = `${updatedCpu}%`;
+            }
+        }, 2500);
+
+        // Initial Load Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            showRegionalView();
+        });
+    </script>
+</body>
+</html>
